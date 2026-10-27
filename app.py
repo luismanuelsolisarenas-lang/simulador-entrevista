@@ -12,7 +12,10 @@ st.set_page_config(
 )
 
 # Modelo activo de Gemini
-MODEL_NAME = "gemini-3.8-flash"
+# Cambia esta línea:
+# MODEL_NAME = "gemini-3.8-flash"
+
+MODEL_NAME = "gemini-1.5-flash"
 
 # Inicializar cliente de Gemini usando la API Key de Secrets o Entorno
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
