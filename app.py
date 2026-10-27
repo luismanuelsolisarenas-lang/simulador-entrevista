@@ -11,8 +11,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# Modelo activo de Gemini
-MODEL_NAME = "gemini-3.8-flash"
+# Lista de modelos ordenados por preferencia (fallback)
+PRIMARY_MODEL = "gemini-3.8-flash"
+FALLBACK_MODEL = "gemini-2.5-flash"
 
 # Inicializar cliente de Gemini usando la API Key de Secrets o Entorno
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -26,6 +27,24 @@ try:
 except Exception as e:
     st.error(f"Error al inicializar el cliente de Gemini: {e}")
     st.stop()
+
+# Función auxiliar para generar contenido probando con modelo principal y fallback
+def generate_content_with_fallback(contents, config):
+    try:
+        return client.models.generate_content(
+            model=PRIMARY_MODEL,
+            contents=contents,
+            config=config
+        )
+    except APIError as e:
+        # Si el error es por alta demanda o cuota, intentamos con el modelo secundario
+        if "high demand" in str(e).lower() or "quota" in str(e).lower() or e.code in [429, 503]:
+            return client.models.generate_content(
+                model=FALLBACK_MODEL,
+                contents=contents,
+                config=config
+            )
+        raise e
 
 # ----------------------------------------------------
 # A. Inicialización de Estado en st.session_state
@@ -108,8 +127,7 @@ if not st.session_state.interview_started and len(st.session_state.messages) == 
     
     with st.spinner("Iniciando entrevista..."):
         try:
-            response = client.models.generate_content(
-                model=MODEL_NAME,
+            response = generate_content_with_fallback(
                 contents=prompt_inicial,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -156,8 +174,7 @@ if st.session_state.user_answers_count < 3 and not st.session_state.final_report
                         contents.append(types.Content(role=role, parts=[types.Part.from_text(text=m["content"])]))
                     
                     try:
-                        response = client.models.generate_content(
-                            model=MODEL_NAME,
+                        response = generate_content_with_fallback(
                             contents=contents,
                             config=types.GenerateContentConfig(
                                 system_instruction=system_instruction,
@@ -208,8 +225,7 @@ Genera un reporte estrictamente con el siguiente formato Markdown:
 **Resultado:** [APROBADO o NO APROBADO]
 """
         try:
-            response_report = client.models.generate_content(
-                model=MODEL_NAME,
+            response_report = generate_content_with_fallback(
                 contents=prompt_reporte,
                 config=types.GenerateContentConfig(
                     temperature=0.3
