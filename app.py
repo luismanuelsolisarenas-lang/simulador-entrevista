@@ -11,6 +11,9 @@ st.set_page_config(
     layout="wide"
 )
 
+# Modelo activo de Gemini para el SDK google
+)
+
 # Modelo activo de Gemini
 # Cambia esta línea:
 # MODEL_NAME = "gemini-3.8-flash"
