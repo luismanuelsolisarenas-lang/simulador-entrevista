@@ -12,7 +12,6 @@ st.set_page_config(
 )
 
 # Modelo activo de Gemini para el SDK google
-)
 
 # Modelo activo de Gemini
 # Cambia esta línea:
