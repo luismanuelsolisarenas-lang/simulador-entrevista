@@ -44,7 +44,7 @@ def generate_content_with_retry(contents, config, max_retries=3):
             raise e
 
 # ----------------------------------------------------
-# A. Inicialización de Estado
+# A. Inicialización de Estado en st.session_state
 # ----------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -68,7 +68,7 @@ def reset_interview():
     st.session_state.final_report = None
 
 # ----------------------------------------------------
-# B. Barra Lateral
+# B. Barra Lateral (Configuración)
 # ----------------------------------------------------
 with st.sidebar:
     st.title("⚙️ Configuración")
@@ -112,12 +112,12 @@ REGLAS DE COMPORTAMIENTO Y SEGURIDAD (ANTI-JAILBREAK):
 """
 
 # ----------------------------------------------------
-# D. Generación de la Pregunta 1 (Corregida)
+# D. Inicio Automático (Pregunta 1)
 # ----------------------------------------------------
 if len(st.session_state.messages) == 0:
     prompt_inicial = f"Inicia la entrevista técnica para la vacante '{st.session_state.selected_role}'. Saluda de forma breve y formula la primera pregunta técnica."
     
-    with st.spinner("Iniciando entrevista y generando primera pregunta..."):
+    with st.spinner("Iniciando entrevista..."):
         try:
             response = generate_content_with_retry(
                 contents=prompt_inicial,
@@ -137,46 +137,46 @@ if len(st.session_state.messages) == 0:
             st.stop()
 
 # ----------------------------------------------------
-# E. Mostrar Historial de Chat
+# E. Renderizar Historial de Chat Completo
 # ----------------------------------------------------
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
 # ----------------------------------------------------
-# F. Lógica Principal (3 Preguntas / Respuestas)
+# F. Captura de Entrada y Generación Adaptativa (3 Preguntas)
 # ----------------------------------------------------
 if st.session_state.user_answers_count < 3 and not st.session_state.final_report:
     user_input = st.chat_input("Escribe tu respuesta aquí...")
     
     if user_input:
+        # 1. Guardar la respuesta del usuario
         st.session_state.messages.append({"role": "user", "content": user_input})
         st.session_state.user_answers_count += 1
         
+        # 2. Si todavía faltan preguntas (respuestas 1 y 2), generar la siguiente pregunta
         if st.session_state.user_answers_count < 3:
-            with st.chat_message("assistant"):
-                with st.spinner("Evaluando respuesta y formulando la siguiente pregunta..."):
-                    contents = []
-                    for m in st.session_state.messages:
-                        role = "user" if m["role"] == "user" else "model"
-                        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=m["content"])]))
-                    
-                    try:
-                        response = generate_content_with_retry(
-                            contents=contents,
-                            config=types.GenerateContentConfig(
-                                system_instruction=system_instruction,
-                                temperature=0.7
-                            )
+            with st.spinner("Evaluando respuesta y formulando la siguiente pregunta..."):
+                contents = []
+                for m in st.session_state.messages:
+                    role = "user" if m["role"] == "user" else "model"
+                    contents.append(types.Content(role=role, parts=[types.Part.from_text(text=m["content"])]))
+                
+                try:
+                    response = generate_content_with_retry(
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            temperature=0.7
                         )
-                        st.session_state.messages.append({"role": "assistant", "content": response.text})
-                        st.rerun()
-                    except APIError as e:
-                        st.error(f"❌ Error de API de Gemini: {e.message}")
-                        st.stop()
+                    )
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                except APIError as e:
+                    st.error(f"❌ Error de API de Gemini: {e.message}")
+                    st.stop()
         
-        if st.session_state.user_answers_count == 3:
-            st.rerun()
+        # 3. Forzar refresco para mostrar la nueva pregunta o pasar a la fase de reporte
+        st.rerun()
 
 # ----------------------------------------------------
 # G. Generación del Reporte Final
@@ -224,6 +224,7 @@ Genera un reporte estrictamente con el siguiente formato Markdown:
             st.error(f"❌ Error al generar reporte: {e.message}")
             st.stop()
 
+# Mostrar el reporte final si existe
 if st.session_state.final_report:
     st.markdown("---")
     st.success("✅ Entrevista completada.")
