@@ -11,13 +11,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Modelo activo de Gemini para el SDK google
-
-# Modelo activo de Gemini
-# Cambia esta línea:
-# MODEL_NAME = "gemini-3.8-flash"
-
-MODEL_NAME = "gemini-1.5-flash"
+# Modelo activo de Gemini para el SDK google-genai
+MODEL_NAME = "gemini-2.0-flash"
 
 # Inicializar cliente de Gemini usando la API Key de Secrets o Entorno
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -122,6 +117,7 @@ if not st.session_state.interview_started and len(st.session_state.messages) == 
                 )
             )
             st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.rerun()
         except APIError as e:
             st.error(f"❌ Error de API de Gemini: {e.message}")
             st.stop()
@@ -193,7 +189,7 @@ Evalúa el desempeño del candidato para la vacante de '{st.session_state.select
 
 {dialogo_completo}
 
-Genera un reporte strictly con el siguiente formato Markdown:
+Genera un reporte estrictamente con el siguiente formato Markdown:
 
 # 📊 Reporte Final de Evaluación Técnica
 
