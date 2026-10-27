@@ -11,8 +11,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Modelo activo de Gemini para el SDK google-genai
-MODEL_NAME = "gemini-2.0-flash"
+# Modelo activo de Gemini
+MODEL_NAME = "gemini-3.8-flash"
 
 # Inicializar cliente de Gemini usando la API Key de Secrets o Entorno
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
