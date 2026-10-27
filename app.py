@@ -12,10 +12,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# Modelo principal recomendado
+# Modelo activo de Gemini
 MODEL_NAME = "gemini-3.8-flash"
 
-# Inicializar cliente de Gemini usando la API Key de Secrets o Entorno
+# Inicializar cliente de Gemini
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
@@ -28,7 +28,7 @@ except Exception as e:
     st.error(f"Error al inicializar el cliente de Gemini: {e}")
     st.stop()
 
-# Función con reintento automático para manejar picos de alta demanda (High Demand)
+# Función con reintento automático para picos de tráfico
 def generate_content_with_retry(contents, config, max_retries=3):
     for attempt in range(max_retries):
         try:
@@ -38,14 +38,13 @@ def generate_content_with_retry(contents, config, max_retries=3):
                 config=config
             )
         except APIError as e:
-            # Si los servidores están saturados (503/429/high demand), esperamos un segundo y reintentamos
             if ("high demand" in str(e).lower() or e.code in [429, 503]) and attempt < max_retries - 1:
                 time.sleep(2)
                 continue
             raise e
 
 # ----------------------------------------------------
-# A. Inicialización de Estado en st.session_state
+# A. Inicialización de Estado
 # ----------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -62,7 +61,6 @@ if "final_report" not in st.session_state:
 if "selected_role" not in st.session_state:
     st.session_state.selected_role = "Desarrollador Python Junior"
 
-# Función para reiniciar completamente la sesión
 def reset_interview():
     st.session_state.messages = []
     st.session_state.user_answers_count = 0
@@ -70,7 +68,7 @@ def reset_interview():
     st.session_state.final_report = None
 
 # ----------------------------------------------------
-# B. Barra Lateral (Configuración y Selector de Rol)
+# B. Barra Lateral
 # ----------------------------------------------------
 with st.sidebar:
     st.title("⚙️ Configuración")
@@ -81,7 +79,6 @@ with st.sidebar:
         "Integrador de APIs/Bots"
     ]
     
-    # Selector de rol
     nuevo_rol = st.selectbox(
         "Selecciona la Vacante:",
         roles_disponibles,
@@ -94,7 +91,6 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # Botón para reiniciar entrevista
     if st.button("🔄 Reiniciar Entrevista", use_container_width=True):
         reset_interview()
         st.rerun()
@@ -105,7 +101,6 @@ with st.sidebar:
 st.title("💼 Simulador de Entrevistas Técnicas con IA")
 st.caption(f"Puesto: **{st.session_state.selected_role}** | Evaluación adaptativa de 3 preguntas")
 
-# System Instruction con Protección Anti-Jailbreak y Rol Exigente
 system_instruction = f"""
 Eres un Líder Técnico Virtual altamente exigente pero profesional que realiza la primera etapa de evaluación técnica para la vacante: '{st.session_state.selected_role}'.
 
@@ -117,13 +112,12 @@ REGLAS DE COMPORTAMIENTO Y SEGURIDAD (ANTI-JAILBREAK):
 """
 
 # ----------------------------------------------------
-# D. Inicio Automático de la Entrevista (Pregunta 1)
+# D. Generación de la Pregunta 1 (Corregida)
 # ----------------------------------------------------
-if not st.session_state.interview_started and len(st.session_state.messages) == 0:
-    st.session_state.interview_started = True
+if len(st.session_state.messages) == 0:
     prompt_inicial = f"Inicia la entrevista técnica para la vacante '{st.session_state.selected_role}'. Saluda de forma breve y formula la primera pregunta técnica."
     
-    with st.spinner("Iniciando entrevista..."):
+    with st.spinner("Iniciando entrevista y generando primera pregunta..."):
         try:
             response = generate_content_with_retry(
                 contents=prompt_inicial,
@@ -133,6 +127,7 @@ if not st.session_state.interview_started and len(st.session_state.messages) == 
                 )
             )
             st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.session_state.interview_started = True
             st.rerun()
         except APIError as e:
             st.error(f"❌ Error de API de Gemini: {e.message}")
@@ -149,20 +144,15 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 # ----------------------------------------------------
-# F. Lógica Principal de Interacción (3 Preguntas / Respuestas)
+# F. Lógica Principal (3 Preguntas / Respuestas)
 # ----------------------------------------------------
 if st.session_state.user_answers_count < 3 and not st.session_state.final_report:
     user_input = st.chat_input("Escribe tu respuesta aquí...")
     
     if user_input:
-        # 1. Guardar y mostrar respuesta del candidato
         st.session_state.messages.append({"role": "user", "content": user_input})
         st.session_state.user_answers_count += 1
         
-        with st.chat_message("user"):
-            st.markdown(user_input)
-        
-        # 2. Si todavía estamos en la pregunta 1 o 2, generar la siguiente pregunta adaptativa
         if st.session_state.user_answers_count < 3:
             with st.chat_message("assistant"):
                 with st.spinner("Evaluando respuesta y formulando la siguiente pregunta..."):
@@ -179,18 +169,17 @@ if st.session_state.user_answers_count < 3 and not st.session_state.final_report
                                 temperature=0.7
                             )
                         )
-                        st.markdown(response.text)
                         st.session_state.messages.append({"role": "assistant", "content": response.text})
+                        st.rerun()
                     except APIError as e:
                         st.error(f"❌ Error de API de Gemini: {e.message}")
                         st.stop()
         
-        # 3. Si alcanzamos la 3.ª respuesta, detener interacción y refrescar para generar reporte
         if st.session_state.user_answers_count == 3:
             st.rerun()
 
 # ----------------------------------------------------
-# G. Generación del Reporte Final (Formato Markdown)
+# G. Generación del Reporte Final
 # ----------------------------------------------------
 if st.session_state.user_answers_count == 3 and not st.session_state.final_report:
     with st.spinner("Analizando tus 3 respuestas y generando dictamen final..."):
@@ -235,7 +224,6 @@ Genera un reporte estrictamente con el siguiente formato Markdown:
             st.error(f"❌ Error al generar reporte: {e.message}")
             st.stop()
 
-# Mostrar el reporte final si ya existe
 if st.session_state.final_report:
     st.markdown("---")
     st.success("✅ Entrevista completada.")
