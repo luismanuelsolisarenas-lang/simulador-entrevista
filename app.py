@@ -1,4 +1,5 @@
 import os
+import time
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -11,9 +12,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Lista de modelos ordenados por preferencia (fallback)
-PRIMARY_MODEL = "gemini-3.8-flash"
-FALLBACK_MODEL = "gemini-2.5-flash"
+# Modelo principal recomendado
+MODEL_NAME = "gemini-3.8-flash"
 
 # Inicializar cliente de Gemini usando la API Key de Secrets o Entorno
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -28,23 +28,21 @@ except Exception as e:
     st.error(f"Error al inicializar el cliente de Gemini: {e}")
     st.stop()
 
-# Función auxiliar para generar contenido probando con modelo principal y fallback
-def generate_content_with_fallback(contents, config):
-    try:
-        return client.models.generate_content(
-            model=PRIMARY_MODEL,
-            contents=contents,
-            config=config
-        )
-    except APIError as e:
-        # Si el error es por alta demanda o cuota, intentamos con el modelo secundario
-        if "high demand" in str(e).lower() or "quota" in str(e).lower() or e.code in [429, 503]:
+# Función con reintento automático para manejar picos de alta demanda (High Demand)
+def generate_content_with_retry(contents, config, max_retries=3):
+    for attempt in range(max_retries):
+        try:
             return client.models.generate_content(
-                model=FALLBACK_MODEL,
+                model=MODEL_NAME,
                 contents=contents,
                 config=config
             )
-        raise e
+        except APIError as e:
+            # Si los servidores están saturados (503/429/high demand), esperamos un segundo y reintentamos
+            if ("high demand" in str(e).lower() or e.code in [429, 503]) and attempt < max_retries - 1:
+                time.sleep(2)
+                continue
+            raise e
 
 # ----------------------------------------------------
 # A. Inicialización de Estado en st.session_state
@@ -127,7 +125,7 @@ if not st.session_state.interview_started and len(st.session_state.messages) == 
     
     with st.spinner("Iniciando entrevista..."):
         try:
-            response = generate_content_with_fallback(
+            response = generate_content_with_retry(
                 contents=prompt_inicial,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -174,7 +172,7 @@ if st.session_state.user_answers_count < 3 and not st.session_state.final_report
                         contents.append(types.Content(role=role, parts=[types.Part.from_text(text=m["content"])]))
                     
                     try:
-                        response = generate_content_with_fallback(
+                        response = generate_content_with_retry(
                             contents=contents,
                             config=types.GenerateContentConfig(
                                 system_instruction=system_instruction,
@@ -225,7 +223,7 @@ Genera un reporte estrictamente con el siguiente formato Markdown:
 **Resultado:** [APROBADO o NO APROBADO]
 """
         try:
-            response_report = generate_content_with_fallback(
+            response_report = generate_content_with_retry(
                 contents=prompt_reporte,
                 config=types.GenerateContentConfig(
                     temperature=0.3
